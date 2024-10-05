@@ -32,6 +32,7 @@ class ExtractVideoData:
     def __init__(self, file_path, label):
         self.file_path = file_path
         self.label = label
+        self.file_name = str(uuid.uuid4())
 
     def process_file(self):
         cam = cv.VideoCapture(self.file_path)
@@ -100,14 +101,10 @@ class ExtractVideoData:
                             hand_data['rear'] = [right_ear.x, right_ear.y, right_ear.z]
                         dist_dir = f'/tmp/training_data/{label}'
                         os.makedirs(dist_dir, exist_ok=True)
-                        with open(os.path.join(dist_dir, f'{uuid.uuid4()}.txt'), 'a') as f:
+                        with open(os.path.join(dist_dir, f'{self.file_name}.txt'), 'a') as f:
                             f.write(json.dumps(hand_data) + '\n')
-                        break
-            cv.imshow("Hands and Face Detection", frame_bgr)
+                        # break
 
-            # Exit the loop if 'q' key is pressed
-            if cv.waitKey(20) & 0xff == ord('q'):
-                break
 
 
 if __name__ == '__main__':
