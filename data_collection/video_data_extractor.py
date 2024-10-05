@@ -1,119 +1,126 @@
-import json
 import os
-import cv2 as cv
-import mediapipe.python.solutions.hands as mp_hands
-import mediapipe.python.solutions.face_mesh as mp_face_mesh
-import mediapipe.python.solutions.drawing_utils as drawing
-import mediapipe.python.solutions.drawing_styles as drawing_styles
+import json
 import numpy as np
-import uuid
-
-# Initialize the Hands model
-hands = mp_hands.Hands(
-    static_image_mode=False,
-    max_num_hands=2,
-    min_detection_confidence=0.5
-)
-
-# Initialize the Face Mesh model
-face_mesh = mp_face_mesh.FaceMesh(
-    static_image_mode=False,
-    max_num_faces=1,
-    refine_landmarks=True,
-    min_detection_confidence=0.5
-)
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+import joblib
 
 
-def calculate_distance(point1, point2):
-    return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2 + (point1[2] - point2[2]) ** 2)
+# Step 1: Load Gesture Data from .json Files
+def load_gesture_data(data_dir):
+    gestures = []
+    labels = []
+
+    # Iterate over the label directories (e.g., A, B, C...)
+    for label in os.listdir(data_dir):
+        label_dir = os.path.join(data_dir, label)
+        if not os.path.isdir(label_dir):
+            continue
+
+        # Iterate over all the .json files in each directory
+        for file_name in os.listdir(label_dir):
+            file_path = os.path.join(label_dir, file_name)
+
+            # Open and load the JSON data
+            with open(file_path, 'r') as f:
+                gesture_data = json.load(f)
+                gestures.append(gesture_data)
+                labels.append(label)  # Use the directory name as the label
+
+    return gestures, labels
 
 
-class ExtractVideoData:
-    def __init__(self, file_path, label):
-        self.file_path = file_path
-        self.label = label
-        self.file_name = str(uuid.uuid4())
+# Step 2: Preprocess Gesture Data (Flatten it and ensure consistent shape)
+def flatten_gesture(gesture):
+    flattened_gesture = []
 
-    def process_file(self):
-        cam = cv.VideoCapture(self.file_path)
-        while cam.isOpened():
-            success, frame = cam.read()
-            if not success:
-                print("End of video or unable to read the video")
-                break
+    # Ensure we have consistent length by filling missing parts with zeros
+    def extract_landmarks(key, size=63):
+        if key in gesture:
+            return gesture[key]
+        else:
+            return [0] * size  # Fill missing hand/face data with zeros
 
-            # Convert the frame from BGR to RGB
-            frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+    # Flatten the gesture data
+    flattened_gesture.extend(extract_landmarks('h1'))
+    flattened_gesture.extend(extract_landmarks('h2'))
+    flattened_gesture.extend(extract_landmarks('nose', 3))
+    flattened_gesture.extend(extract_landmarks('chin', 3))
+    flattened_gesture.extend(extract_landmarks('leye', 3))
+    flattened_gesture.extend(extract_landmarks('reye', 3))
+    flattened_gesture.extend(extract_landmarks('lear', 3))
+    flattened_gesture.extend(extract_landmarks('rear', 3))
 
-            # Process the frame for hand and face detection
-            hands_detected = hands.process(frame_rgb)
-            face_detected = face_mesh.process(frame_rgb)
-
-            # Convert back to BGR
-            frame_bgr = cv.cvtColor(frame_rgb, cv.COLOR_RGB2BGR)
-
-            # Initialize lists to store distances
-            distances = []
-
-            # If hands are detected, draw landmarks
-            if hands_detected.multi_hand_landmarks:
-                for hand_landmarks in hands_detected.multi_hand_landmarks:
-                    drawing.draw_landmarks(
-                        frame_bgr,
-                        hand_landmarks,
-                        mp_hands.HAND_CONNECTIONS,
-                        drawing_styles.get_default_hand_landmarks_style(),
-                        drawing_styles.get_default_hand_connections_style(),
-                    )
-
-            # If face is detected, draw landmarks and calculate distances
-            if face_detected.multi_face_landmarks:
-                for face_landmarks in face_detected.multi_face_landmarks:
-                    drawing.draw_landmarks(
-                        frame_bgr,
-                        face_landmarks,
-                        mp_face_mesh.FACEMESH_TESSELATION,
-                        drawing_styles.get_default_face_mesh_tesselation_style(),
-                    )
-
-                    # Extract key facial landmarks
-                    nose = face_landmarks.landmark[0]  # Nose
-                    chin = face_landmarks.landmark[152]  # Chin
-                    left_ear = face_landmarks.landmark[234]  # Left Ear
-                    right_ear = face_landmarks.landmark[454]  # Right Ear
-                    left_eye_outer = face_landmarks.landmark[159]  # Left Eye Outer
-                    right_eye_outer = face_landmarks.landmark[386]  # Right Eye Outer
-
-                    if hands_detected.multi_hand_landmarks:
-                        hand_data = {'h1': [0 for i in range(63)], 'h2': [0 for i in range(63)]}
-
-                        for index, hand_landmarks in enumerate(hands_detected.multi_hand_landmarks):
-                            hand_data[f'h{index + 1}'] = []
-                            for i in hand_landmarks.landmark:
-                                hand_data[f'h{index + 1}'].append(i.x)
-                                hand_data[f'h{index + 1}'].append(i.y)
-                                hand_data[f'h{index + 1}'].append(i.z)
-                            hand_data['nose'] = [nose.x, nose.y, nose.z]
-                            hand_data['chin'] = [chin.x, chin.y, chin.z]
-                            hand_data['leye'] = [left_eye_outer.x, left_eye_outer.y, left_eye_outer.z]
-                            hand_data['reye'] = [right_eye_outer.x, right_eye_outer.y, right_eye_outer.z]
-                            hand_data['lear'] = [left_ear.x, left_ear.y, left_ear.z]
-                            hand_data['rear'] = [right_ear.x, right_ear.y, right_ear.z]
-                        dist_dir = f'/tmp/training_data/{label}'
-                        os.makedirs(dist_dir, exist_ok=True)
-                        with open(os.path.join(dist_dir, f'{self.file_name}.txt'), 'a') as f:
-                            f.write(json.dumps(hand_data) + '\n')
-                        # break
+    return flattened_gesture
 
 
+# Step 3: Load and preprocess the data
+def preprocess_data(data_dir):
+    gestures, labels = load_gesture_data(data_dir)
 
-if __name__ == '__main__':
-    base_path = '/home/thunderhorn/Videos/alphabet'
-    directories = os.listdir(base_path)
-    for label in directories:
-        dir_path = os.path.join(base_path, label)
-        dir_files = os.listdir(dir_path)
-        for file in dir_files:
-            file_path = os.path.join(dir_path, file)
-            extracted_data = ExtractVideoData(file_path, label).process_file()
+    # Flatten each gesture data and normalize if needed
+    X = np.array([flatten_gesture(gesture) for gesture in gestures])
+    Y = np.array(labels)
 
+    return X, Y
+
+
+# Step 4: Train the KNN model
+def train_knn_model(X, Y):
+    # Split the data into training and testing sets (80% training, 20% testing)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+
+    # Initialize and train KNN model
+    knn = KNeighborsClassifier(n_neighbors=3)  # You can change n_neighbors to tune performance
+    knn.fit(X_train, y_train)
+
+    # Evaluate the model on the test set
+    y_pred = knn.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f'KNN Accuracy: {accuracy * 100:.2f}%')
+
+    return knn
+
+
+# Step 5: Save the trained model
+def save_model(clf, model_path):
+    joblib.dump(clf, model_path)
+    print(f"Model saved to {model_path}")
+
+
+# Step 6: Load a previously saved model
+def load_model(model_path):
+    return joblib.load(model_path)
+
+
+# Step 7: Cross-validate the KNN model
+def cross_validate_knn(X, Y):
+    knn = KNeighborsClassifier(n_neighbors=3)
+    scores = cross_val_score(knn, X, Y, cv=5)
+    print(f'Cross-validation scores: {scores}')
+    print(f'Average accuracy: {np.mean(scores) * 100:.2f}%')
+
+
+# Main execution
+if __name__ == "__main__":
+    # Define your data directory where .json files are stored
+    data_dir = '/home/thunderhorn/PycharmProjects/gesture-to-speech/training_data/'
+    model_path = 'gesture_knn_model.pkl'
+
+    # Preprocess the data
+    X, Y = preprocess_data(data_dir)
+    print(f'Number of gestures: {len(X)}')
+    print(f'Number of labels: {len(Y)}')
+
+    # Train the KNN model
+    knn_model = train_knn_model(X, Y)
+
+    # Save the trained KNN model
+    save_model(knn_model, model_path)
+
+    # Cross-validate the KNN model
+    cross_validate_knn(X, Y)
+
+    # (Optional) Load the model for future predictions
+    # loaded_clf = load_model(model_path)
