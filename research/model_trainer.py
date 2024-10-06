@@ -60,7 +60,6 @@ def extract_landmarks(image):
                 # Compute offsets from wrist to nose
                 if wrist_coords is not None:
                     offsets['Nose_offset'] = [(nose_coords[0] - wrist_coords[0]) * 10, (nose_coords[1] - wrist_coords[1]) * 10]
-
     return offsets
 
 # Load the training data from the file
@@ -167,8 +166,7 @@ if __name__ == '__main__':
             feature_vector = np.array(feature_vector).reshape(1, 1, -1)
             prediction = model.predict(feature_vector)
             prediction_accuracy = np.max(prediction)
-
-            predicted_label = int_to_label[np.argmax(prediction)]
+            predicted_label = int_to_label[np.argmax(prediction.flatten())]
 
             # Display the predicted label on the frame
             cv2.putText(frame, f'Predicted: {predicted_label} {prediction_accuracy * 100:.2f}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
