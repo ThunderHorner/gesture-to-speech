@@ -1,4 +1,6 @@
 import os
+from base64 import decode
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import logging
 logging.getLogger('tensorflow').disabled = True
@@ -7,6 +9,8 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 import pickle
+import time
+from datetime import datetime
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -189,6 +193,7 @@ if __name__ == '__main__':
         exit()
     prev_label = None
     has_logged_stop = False
+    decoded_data = []
     while cap.isOpened():
         ret, frame = cap.read()
         frame = cv2.flip(frame, 1)
@@ -215,6 +220,7 @@ if __name__ == '__main__':
                 predicted_label = int_to_label[np.argmax(prediction.flatten())]
                 if True:
                     with open('/tmp/predicted_labels.txt', 'a')as f:
+                        decoded_data.append(f'{datetime.now().timestamp()}: {predicted_label}')
                         f.write(predicted_label + '\n')
                     # Display the predicted label on the frame
                     cv2.putText(frame, f'Predicted: {predicted_label} {prediction_accuracy * 100:.2f}', (10, 50),
@@ -237,3 +243,6 @@ if __name__ == '__main__':
     # Release the webcam and close windows
     cap.release()
     cv2.destroyAllWindows()
+    from openai_integration import generate_gesture_sentence
+    sentence = generate_gesture_sentence(decoded_data)
+    print(sentence)
