@@ -6,13 +6,16 @@ logging.getLogger('mediapipe').disabled = True
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
+import pickle
 import cv2
 import mediapipe as mp
 import numpy as np
 import json
 import warnings
 warnings.filterwarnings('ignore')
-
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization
+from tensorflow.keras.regularizers import l2
 # Initialize MediaPipe Hands and Face Mesh
 mp_hands = mp.solutions.hands
 mp_face_mesh = mp.solutions.face_mesh
@@ -20,9 +23,9 @@ mp_face_mesh = mp.solutions.face_mesh
 # Function to compute Euclidean distance between two points
 def euclidean_distance(point1, point2):
     return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
-
+from feature_extractor import extract_landmarks
 # Function to extract hand and facial landmarks and compute offsets
-def extract_landmarks(image):
+def _extract_landmarks(image):
     wrist_coords = None
     fingertip_coords = []
     nose_coords = None
@@ -98,9 +101,32 @@ def create_lstm_model(input_shape, num_classes):
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     return model
 
+
+def create_lstm_model_2(input_shape, num_classes):
+    model = Sequential([
+        LSTM(32, input_shape=input_shape, return_sequences=True, kernel_regularizer=l2(0.01)),
+        BatchNormalization(),
+        Dropout(0.3),
+
+        LSTM(32, kernel_regularizer=l2(0.01)),
+        BatchNormalization(),
+        Dropout(0.3),
+
+        Dense(32, activation='relu', kernel_regularizer=l2(0.01)),
+        BatchNormalization(),
+        Dropout(0.3),
+
+        Dense(num_classes, activation='softmax')
+    ])
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+
 if __name__ == '__main__':
     # Update with the path to your training data file
-    training_data_file = '/tmp/training_data.log'
+    training_data_file = '/home/thunderhorn/PycharmProjects/gesture-to-speech/training_data/training_data.log'
+    model_file = 'gesture_recognition_model2.h5'
+    label_map_file = 'label_map.pkl'
 
     # Load the training data and labels
     X, labels = load_training_data(training_data_file)
@@ -113,12 +139,14 @@ if __name__ == '__main__':
     X_valid = [xi for xi in X if len(xi) == expected_features_count]
     labels_valid = [labels[i] for i in range(len(X)) if len(X[i]) == expected_features_count]
     print(set(labels_valid))
+
     # Convert the filtered data to a NumPy array
     X_valid = np.array([np.array(xi, dtype=np.float32) for xi in X_valid])
 
     # Reshape the input data to match the LSTM input requirements (samples, timesteps, features)
     X_valid = X_valid.reshape((X_valid.shape[0], 1, X_valid.shape[1]))
     X = X_valid
+
     # Update the labels to match the filtered data
     y_valid = [label_to_int[label] for label in labels_valid]
 
@@ -128,17 +156,31 @@ if __name__ == '__main__':
     # Create the LSTM model
     input_shape = (X_valid.shape[1], X_valid.shape[2])
     num_classes = len(label_to_int)
-    if input() == 'train':
+
+    if input("Enter 'train' to train a new model, or any other key to use existing model: ").lower() == 'train':
         model = create_lstm_model(input_shape, num_classes)
 
         # Train the model
         model.fit(X, y, epochs=50, batch_size=4, validation_split=0.2)
 
         # Save the trained model
-        model.save('/tmp/gesture_recognition_model.h5')
+        model.save(model_file)
 
-    # Load the trained model for prediction
-    model = tf.keras.models.load_model('/tmp/gesture_recognition_model.h5')
+        # Save the label mapping
+        with open(label_map_file, 'wb') as f:
+            pickle.dump((label_to_int, int_to_label), f)
+
+        print(f"Model and label mapping saved to {model_file} and {label_map_file}")
+    else:
+        from tensorflow.keras.models import Sequential, load_model
+        # Load the trained model for prediction
+        model = load_model(model_file)
+
+        # Load the label mapping
+        with open(label_map_file, 'rb') as f:
+            label_to_int, int_to_label = pickle.load(f)
+
+        print(f"Model and label mapping loaded from {model_file} and {label_map_file}")
 
     # Capture video from webcam
     cap = cv2.VideoCapture(0)
@@ -158,7 +200,7 @@ if __name__ == '__main__':
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         # Extract landmarks and compute offsets
-        offsets = extract_landmarks(frame_rgb)
+        _, offsets = extract_landmarks(frame_rgb)
 
         # If offsets are detected, make a prediction
         if offsets:
@@ -166,10 +208,12 @@ if __name__ == '__main__':
             feature_vector = np.array(feature_vector).reshape(1, 1, -1)
             prediction = model.predict(feature_vector)
             prediction_accuracy = np.max(prediction)
-            predicted_label = int_to_label[np.argmax(prediction.flatten())]
+            if (prediction_accuracy * 100) > 95:
+                predicted_label = int_to_label[np.argmax(prediction.flatten())]
 
-            # Display the predicted label on the frame
-            cv2.putText(frame, f'Predicted: {predicted_label} {prediction_accuracy * 100:.2f}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+                # Display the predicted label on the frame
+                cv2.putText(frame, f'Predicted: {predicted_label} {prediction_accuracy * 100:.2f}', (10, 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
         # Display the frame
         cv2.imshow('Gesture Recognition', frame)
