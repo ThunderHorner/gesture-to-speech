@@ -116,7 +116,7 @@ if __name__ == '__main__':
         exit()
     import string
     # Define the array of words to be presented
-    words_to_present = ['hello', 'my', 'name', 'is', 'iloveyou', 'thankyou']
+    words_to_present = ['is']
 
     # Call the function with the array of words
     record_gesture_training_data(cap, frames_count=20, words=words_to_present)

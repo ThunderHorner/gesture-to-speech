@@ -187,7 +187,7 @@ if __name__ == '__main__':
     if not cap.isOpened():
         print("Error: Could not open webcam.")
         exit()
-
+    prev_label = None
     while cap.isOpened():
         ret, frame = cap.read()
         frame = cv2.flip(frame, 1)
@@ -208,12 +208,15 @@ if __name__ == '__main__':
             feature_vector = np.array(feature_vector).reshape(1, 1, -1)
             prediction = model.predict(feature_vector)
             prediction_accuracy = np.max(prediction)
-            if (prediction_accuracy * 100) > 95:
+            if (prediction_accuracy * 100) > 80:
                 predicted_label = int_to_label[np.argmax(prediction.flatten())]
-
-                # Display the predicted label on the frame
-                cv2.putText(frame, f'Predicted: {predicted_label} {prediction_accuracy * 100:.2f}', (10, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+                if True:
+                    prev_label = predicted_label
+                    with open('/tmp/predicted_labels.txt', 'a')as f:
+                        f.write(predicted_label + '\n')
+                    # Display the predicted label on the frame
+                    cv2.putText(frame, f'Predicted: {predicted_label} {prediction_accuracy * 100:.2f}', (10, 50),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
         # Display the frame
         cv2.imshow('Gesture Recognition', frame)
