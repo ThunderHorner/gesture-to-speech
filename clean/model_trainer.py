@@ -188,6 +188,7 @@ if __name__ == '__main__':
         print("Error: Could not open webcam.")
         exit()
     prev_label = None
+    has_logged_stop = False
     while cap.isOpened():
         ret, frame = cap.read()
         frame = cv2.flip(frame, 1)
@@ -203,20 +204,28 @@ if __name__ == '__main__':
         _, offsets = extract_landmarks(frame_rgb)
 
         # If offsets are detected, make a prediction
+
         if offsets:
+            prev_label = '-----'
             feature_vector = [item for sublist in offsets.values() for item in sublist]
             feature_vector = np.array(feature_vector).reshape(1, 1, -1)
             prediction = model.predict(feature_vector)
             prediction_accuracy = np.max(prediction)
-            if (prediction_accuracy * 100) > 80:
+            if (prediction_accuracy * 100) > 90:
                 predicted_label = int_to_label[np.argmax(prediction.flatten())]
                 if True:
-                    prev_label = predicted_label
                     with open('/tmp/predicted_labels.txt', 'a')as f:
                         f.write(predicted_label + '\n')
                     # Display the predicted label on the frame
                     cv2.putText(frame, f'Predicted: {predicted_label} {prediction_accuracy * 100:.2f}', (10, 50),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+                    prev_label = None
+                    has_logged_stop = False
+        if not offsets and prev_label == '-----' and has_logged_stop == False:
+            has_logged_stop = True
+            with open('/tmp/predicted_labels.txt', 'a') as f:
+                f.write( '-----\n')
+
 
         # Display the frame
         cv2.imshow('Gesture Recognition', frame)
