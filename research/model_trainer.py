@@ -107,21 +107,36 @@ if __name__ == '__main__':
     X, labels = load_training_data(training_data_file)
     y, label_to_int, int_to_label = encode_labels(labels)
 
-    # Reshape the input data to match the LSTM input requirements
-    # LSTM expects input in the form (samples, timesteps, features)
-    X = np.array([np.array(xi, dtype=np.float32) for xi in X])
-    X = X.reshape((X.shape[0], 1, X.shape[1]))
+    # Ensure all elements of X have the same length (expected_features_count)
+    expected_features_count = len(X[0])  # Assuming the first element has the correct number of features
+
+    # Filter out inconsistent elements
+    X_valid = [xi for xi in X if len(xi) == expected_features_count]
+    labels_valid = [labels[i] for i in range(len(X)) if len(X[i]) == expected_features_count]
+    print(set(labels_valid))
+    # Convert the filtered data to a NumPy array
+    X_valid = np.array([np.array(xi, dtype=np.float32) for xi in X_valid])
+
+    # Reshape the input data to match the LSTM input requirements (samples, timesteps, features)
+    X_valid = X_valid.reshape((X_valid.shape[0], 1, X_valid.shape[1]))
+    X = X_valid
+    # Update the labels to match the filtered data
+    y_valid = [label_to_int[label] for label in labels_valid]
+
+    # Convert labels to a NumPy array
+    y_valid = np.array(y_valid)
 
     # Create the LSTM model
-    input_shape = (X.shape[1], X.shape[2])
+    input_shape = (X_valid.shape[1], X_valid.shape[2])
     num_classes = len(label_to_int)
-    model = create_lstm_model(input_shape, num_classes)
+    if input() == 'train':
+        model = create_lstm_model(input_shape, num_classes)
 
-    # Train the model
-    model.fit(X, y, epochs=50, batch_size=4, validation_split=0.2)
+        # Train the model
+        model.fit(X, y, epochs=50, batch_size=4, validation_split=0.2)
 
-    # Save the trained model
-    model.save('/tmp/gesture_recognition_model.h5')
+        # Save the trained model
+        model.save('/tmp/gesture_recognition_model.h5')
 
     # Load the trained model for prediction
     model = tf.keras.models.load_model('/tmp/gesture_recognition_model.h5')
@@ -135,6 +150,7 @@ if __name__ == '__main__':
     while cap.isOpened():
         ret, frame = cap.read()
         frame = cv2.flip(frame, 1)
+        frame = cv2.resize(frame, (frame.shape[1] * 2, frame.shape[0] * 2))  # Resize the frame to 2x size
         if not ret:
             print("Reached the end of the video.")
             break

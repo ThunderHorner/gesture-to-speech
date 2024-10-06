@@ -71,6 +71,15 @@ def extract_landmarks(image):
                 nose_y = int(nose.y * image.shape[0])
                 cv2.circle(image, (nose_x, nose_y), 5, (255, 0, 0), -1)  # Draw blue circle on the nose landmark
 
+    # Validate the offsets count
+    expected_offsets_count = 6  # Five fingertips offsets
+    # if wrist_coords is not None and nose_coords is not None:
+    #     expected_offsets_count += 1  # Add 1 if the nose offset is also available
+
+    if len(offsets) != expected_offsets_count:
+        print("Warning: Incomplete or inconsistent offsets detected.")
+        offsets = {}  # Optionally, return an empty dictionary or handle this case differently
+
     return image, offsets
 
 # Function to record gestures and save training data
@@ -97,7 +106,7 @@ def record_gesture_training_data(cap, num_entries=30, frames_count=10, label='no
 
         # Overlay text to show recording status, label count, and frame count
         if recording:
-            cv2.putText(frame_with_landmarks, f"Recording Label {label_count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+            cv2.putText(frame_with_landmarks, f"Recording Label {label}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
             cv2.putText(frame_with_landmarks, f"Frame Count: {len(recorded_frames)}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
         # Display the frame with landmarks
@@ -157,7 +166,7 @@ if __name__ == '__main__':
 
     mode = 'r'#input("Enter 'r' to record gestures or 'v' to view landmarks: ").strip().lower()
     if mode == 'r':
-        record_gesture_training_data(cap, num_entries=10, frames_count=20, label='a')
+        record_gesture_training_data(cap, num_entries=10, frames_count=20, label='cat')
     elif mode == 'v':
         while cap.isOpened():
             ret, frame = cap.read()
