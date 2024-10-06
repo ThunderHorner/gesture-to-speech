@@ -27,15 +27,20 @@ def extract_landmarks(image):
             for hand_landmark in hand_results.multi_hand_landmarks:
                 needed_data = [
                     0,  # WRIST
+                    2, # thumbb_tip
                     4,  # THUMB_TIP
+                    6, #Index mid
                     8,  # INDEX_FINGER_TIP
+                    10, #MIddle mid
                     12,  # MIDDLE_FINGER_TIP
+                    14, # RING MID
                     16,  # RING_FINGER_TIP
+                    18,  # Pinky mid
                     20]  # PINKY_TIP
 
                 # Extract wrist and finger tips
                 wrist_coords = [hand_landmark.landmark[0].x, hand_landmark.landmark[0].y]
-                finger_names = ["Thumb", "Index", "Middle", "Ring", "Pinky"]
+                finger_names = ["Thumb2", "Thumb tip", "Index 2", "index tip", "Middle2","Middletip", "Ring2","Ring Tip", "Pinky2", "Pinky tip"]
                 for idx, _i in enumerate(needed_data[1:]):
                     fingertip = hand_landmark.landmark[_i]
                     fingertip_coords.append([fingertip.x, fingertip.y])
@@ -66,8 +71,7 @@ def extract_landmarks(image):
                 nose_x = int(nose.x * image.shape[1])
                 nose_y = int(nose.y * image.shape[0])
                 cv2.circle(image, (nose_x, nose_y), 5, (255, 0, 0), -1)
-
-    expected_offsets_count = 6  # Five fingertips offsets
+    expected_offsets_count = 11 # Five fingertips offsets
 
     if len(offsets) != expected_offsets_count:
         print("Warning: Incomplete or inconsistent offsets detected.")

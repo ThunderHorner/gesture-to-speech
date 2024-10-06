@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
     mode = 'r'#input("Enter 'r' to record gestures or 'v' to view landmarks: ").strip().lower()
     if mode == 'r':
-        record_gesture_training_data(cap, num_entries=10, frames_count=20, label='n')
+        record_gesture_training_data(cap, num_entries=10, frames_count=20, label='m')
     elif mode == 'v':
         while cap.isOpened():
             ret, frame = cap.read()
